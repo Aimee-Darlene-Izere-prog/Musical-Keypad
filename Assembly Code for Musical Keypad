@@ -1,0 +1,112 @@
+;; Musical Keypad 
+;; Assembly code
+;; Author : AIMEE DARLENE IZERE
+;; 
+;; This LC3 code reads a key that is being played from a keypad 
+;; and then play a corresponding note to the speaker 
+;;
+;; Throughout this code, I use different memory-mapped I/O addresses to get data from the keypad and play the note to the speaker
+;; Those addresses are labeled as KPDR, FGCR , FGDR , KPSR, and GLCR
+
+;; INPUTING : Getting the key value from the keypad
+;; The ASCII value of the current key being pressed is stored in the memory-mapped I/O address KPDR
+;; If there is no key that is pressed, then the main program keeps looping
+;; if KPDR = 0, then no key is pressed or the key has been released
+;; else, we play the note of the key that is pressed
+
+;; GETTING THE FREQUENCY FOR THE OUTPOUT TONE
+;; Once we have confirmed that the is a key that is currently being pressed,
+;; then, we look up its frequency in FREQ_TABLE
+;; and use FGCR to play that note
+
+;; START/STOP PLAYING A NOTE
+;; The memory-mapped I/O FGCR controls wehn to stop and start playing the note
+;; if FGCR = 1, then we start playing a key note
+;; else if FGCR = 0, then we stop playing a key note
+
+;; RELEASING A KEY
+;; After we start playing a key note, we keep checking to see if the key has been released.
+;; Once the key is released, the function generator stops playing 
+;; The memory-mapped I/O address KPSR keep track for how long a key has been pressed
+;; if KPSR = 0, then the key is released and the program stops playing 
+
+
+.ORIG	X3000			; Start the program at this adress
+
+AND R0, R0, #0			; Initialize R0 to 0
+STI R0, FGCR			; Stop any note that is playing 
+BR WAIT_FOR_KEY			; Then Branch to WAIT_FOR_KEY
+
+;; Start of the main loop 
+;; R0 = ASCII value of the pressed key 
+WAIT_FOR_KEY
+	LDI R0, KPDR		; Load the current key in KPDR
+	BRz WAIT_FOR_KEY	; if KPDR = 0, keep checking 
+
+	;; Otherwise, R0 = ASCII value of the key
+	LD R5, ASCII_OFFSET
+	ADD R0, R0, R5
+
+	;; Check if the index is within the range[0,8]
+	ADD R1, R0, #-8
+	BRp WAIT_FOR_KEY	; if out of range, keep checking
+
+	;; if the index is withing the range,
+	;; then lookup its associated frequency in FREQ_TABLE
+
+	LEA R2, FREQ_TABLE	; Load addresses of the frequencies
+	ADD R2, R2, R0		  ; Add the index to the base address
+	LDR R1, R2, #0		  ; R1 = R2 = Frequency
+	
+	STI R1, FGDR		  ; Write the frequency into FGDR
+
+	;; play note
+	AND R0, R0, #0		; R0 = 0
+	ADD R0, R0, #1		; R0 = 1
+	STI R0, FGCR		  ; FGCR = 1. Start playing music
+
+
+WAIT_FOR_RELEASE		; wait for key release
+	LDI R0, KPSR		  ; Load the key in KPSR into R0. KPSR = time since the last key was pressed
+	BRz KEY_RELEASED	; if there is no value in KPSR, then key is released
+	
+	;; Otherwise, wait for the key to be released
+	BR WAIT_FOR_RELEASE
+
+KEY_RELEASED			  ; If the key is released, stop playing the note
+	AND R0, R0, #0 		; R0 = 0
+	STI R0, FGCR		  ; FGCR = 0. Stop playing note
+	BR WAIT_FOR_KEY		; Go back to the main loop
+	
+ HALT
+
+;; Defining Labels
+KPDR				    ;KPDR stands for Keypad Data Register
+	.FILL x4400		; Holds the most recent key to be pressed
+
+KPSR
+	.FILL x4402		; Tracks the number in milliseconds since the last key was pressed
+
+FGDR			    	; FGDR stands for  Function Generator Data Register
+	.FILL x4408		; Specifies the frequency for the output tone
+
+FGCR				    ; FGCR stands for Function Generator Control Register
+	.FILL X440a		; controls the behavior of the function generator 
+
+
+ASCII_OFFSET
+	.FILL #-49 		; convert ASCII to number	
+
+;; Frequencies table
+FREQ_TABLE
+	.FILL #440  		; 440 Hz - key 1
+	.FILL #466  		; 466 Hz - key 2
+	.FILL #493 		  ; 493 Hz - key 3
+	.FILL #523  		; 523 Hz - key 4
+	.FILL #554  		; 554 Hz - key 5
+	.FILL #587 		  ; 587 Hz - key 6
+	.FILL #622  		; 622 Hz - key 7
+	.FILL #698  		; 698 Hz - key 8
+	.FILL #783  		; 783 Hz - key 9
+
+.END				; End of the program 
